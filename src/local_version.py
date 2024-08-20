@@ -10,7 +10,7 @@ import aiohttp
 from tqdm import tqdm
 
 LOCAL_VERSION_FILE = 'local_version.json'
-LATEST_VERSION = 'v0.0.1'
+LATEST_VERSION = 'v0.0.2'
 REPO_API_URL = "https://api.github.com/repos/DarkMatro/HD2_mod_installer"
 
 
@@ -149,8 +149,8 @@ async def self_update(latest_version: str, download_url: str) -> None:
         @echo off
         timeout /t 2 /nobreak > nul
         move /y "{temp_exe_path}" "{sys.argv[0]}"
+        timeout /t 2 /nobreak > nul
         start "" "{sys.argv[0]}"
-        del "%~f0" & exit
         """
         bat_path = os.path.join(os.getcwd(), "update.bat")
         with open(bat_path, "w", encoding='utf-8') as bat_file:

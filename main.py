@@ -286,6 +286,7 @@ def run_as_admin():
         # Запускает этот скрипт с правами администратора
         ctypes.windll.shell32.ShellExecuteW(
             None, "runas", sys.executable, ' '.join(sys.argv), None, 1)
+        sys.exit(1)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
