@@ -21,7 +21,7 @@ This repository contains the **HD2 Mod Installer**, a Python script designed to 
 - Copy file mod_installer.exe to game folder.
   
 ## Usage
-- Open mod_installer.exe as admin
+- Open mod_installer.exe.
 - Choose Install CMP to check files and download from actual repository.
 
 ## Mods

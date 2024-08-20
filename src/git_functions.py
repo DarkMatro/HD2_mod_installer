@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import os
 import pygit2
@@ -17,9 +16,6 @@ def calculate_sha1(file_path):
     -------
     str
         The SHA1 hash of the file in hexadecimal format.
-
-    >>> calculate_sha1('../Maps/!dkola02.bmp')
-    '4f0f4027dfb9d06142a6c6852d8197fbb0b22a46'
     """
     # Ensure the file exists before trying to read
     if not os.path.isfile(file_path):

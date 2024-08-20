@@ -1,3 +1,5 @@
+# pylint: disable=logging-fstring-interpolation
+
 """
 HD2 CMP Sync Tool
 
@@ -18,9 +20,12 @@ Author: Matro
 """
 
 import asyncio
+import ctypes
 import logging
 import os
+import sys
 import time
+import webbrowser
 from pathlib import Path
 
 import aiofiles
@@ -29,21 +34,16 @@ import aiohttp
 from tqdm import tqdm
 
 from src.check import check_internet_connection, check_game_executable
-from src.local_version import get_local_version, save_local_version
+from src.local_version import get_local_version, save_local_version, check_latest_version
 from src.actual_versions import fetch_cmp_version
 from src.git_functions import calculate_sha1
 
 # Constants
-GITHUB_REPO_URL = 'https://api.github.com/repos/ehylla93/had2-cmp/contents'
-FOLDERS_TO_CHECK = ['Maps', 'Models', 'Sounds', 'Missions', 'Scripts', 'Text']
-GITHUB_API_PER_PAGE_LIMIT = 1000
-GITHUB_TOKEN = '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'
-CMP_OPTIONAL_PATHS = ['cmp_optional/Civil Uniform Mod/Maps',
-                      'cmp_optional/Civil Uniform Mod/Models']
+FOLDERS_TO_CHECK = ['Maps', 'Models', 'Sounds', 'Missions', 'Scripts', 'Text', 'cmp_optional']
 RAW_BASE_URL = 'https://raw.githubusercontent.com/ehylla93/had2-cmp/main'
 
 
-async def fetch_file(session, url, dest_path, pbar):
+async def fetch_file(session: aiohttp.ClientSession, url: str, dest_path: str, pbar):
     """
     Asynchronously download a file from the given URL.
 
@@ -58,11 +58,8 @@ async def fetch_file(session, url, dest_path, pbar):
     pbar : tqdm
         The progress bar to update for overall progress.
     """
-    headers = {
-        'Authorization': f'token {GITHUB_TOKEN}'
-    }
     try:
-        async with session.get(url, headers=headers) as response:
+        async with session.get(url) as response:
             response.raise_for_status()
             chunk_size = 1024  # Размер куска данных для загрузки
             async with aiofiles.open(dest_path, 'wb') as file:
@@ -75,7 +72,7 @@ async def fetch_file(session, url, dest_path, pbar):
         raise
 
 
-async def fetch_with_retry(session, url, retries=3, backoff_factor=2):
+async def fetch_with_retry(session, url, retries=3, backoff_factor=2) -> dict | list:
     """
     Fetch data from GitHub with retry logic on rate limit errors.
 
@@ -95,18 +92,18 @@ async def fetch_with_retry(session, url, retries=3, backoff_factor=2):
     list or dict
         The JSON content of the response.
     """
-    headers = {
-        'Authorization': f'token {GITHUB_TOKEN}'
-    }
-
     for _ in range(retries):
-        async with session.get(url, headers=headers) as response:
+        async with session.get(url) as response:
             if response.status == 403 and 'rate limit' in await response.text():
                 retry_after = int(response.headers.get('Retry-After', backoff_factor))
                 print(f"Requests Rate limit exceeded. Retrying in {retry_after} seconds...")
                 time.sleep(retry_after)
             elif response.status == 404:
                 logging.error(f"Error 404: Not Found. URL: {url}")
+                return []
+            elif response.status == 401:
+                print("Error 401: Unauthorized")
+                logging.error("Error 401: Unauthorized")
                 return []
             else:
                 response.raise_for_status()
@@ -116,102 +113,7 @@ async def fetch_with_retry(session, url, retries=3, backoff_factor=2):
     return []
 
 
-async def fetch_folder_contents(session, folder_url, local_path, files_to_download, page=1,
-                                previous_items=None, is_top_level=True):
-    """
-    Fetch the contents of a folder recursively from GitHub with pagination support and retry logic.
-
-    Parameters
-    ----------
-    session : aiohttp.ClientSession
-        The active client session for making HTTP requests.
-    folder_url : str
-        The URL of the folder in the GitHub repository.
-    local_path : str
-        The local path where the folder contents should be saved.
-    files_to_download : list
-        The list to store the details of files that need to be downloaded.
-    page : int, optional
-        The current page number for pagination (default is 1).
-    previous_items : set, optional
-        The set of previously fetched items to avoid infinite loops (default is None).
-    is_top_level : bool, optional
-        Flag to indicate whether the folder is at the top level (default is True).
-    """
-    if previous_items is None:
-        previous_items = set()
-
-    # Ensure that ?ref=main is added only once
-    if "?ref=main" not in folder_url:
-        folder_url += "?ref=main"
-
-    while True:
-        paginated_url = f"{folder_url}&page={page}&per_page={GITHUB_API_PER_PAGE_LIMIT}"
-        items = await fetch_with_retry(session, paginated_url)
-        if not items or len(items) == 0:
-            break
-
-        current_items = set(item['name'] for item in items)
-
-        # Check if we've already seen these items (avoiding infinite loop)
-        if current_items.issubset(previous_items):
-            break
-
-        previous_items.update(current_items)
-
-        if is_top_level:
-            # Display progress only for top-level folders
-            progress_desc = f"Scanning {os.path.basename(local_path)}"
-            for item in tqdm(items, desc=progress_desc, unit=" files", dynamic_ncols=True):
-                await process_item(item, session, local_path, files_to_download, is_top_level=False)
-        else:
-            # For nested folders, process items without showing progress
-            for item in items:
-                await process_item(item, session, local_path, files_to_download, is_top_level=False)
-        page += 1
-        # Если получено меньше элементов, чем лимит страницы, значит, мы дошли до конца
-        if len(items) < GITHUB_API_PER_PAGE_LIMIT:
-            break
-
-
-async def process_item(item, session, local_path, files_to_download, is_top_level):
-    """
-    Process a single item (file or directory) from the GitHub repository.
-
-    Parameters
-    ----------
-    item : dict
-        The item (file or directory) from the GitHub API response.
-    session : aiohttp.ClientSession
-        The active client session for making HTTP requests.
-    local_path : str
-        The local path where the item should be saved.
-    files_to_download : list
-        The list to store the details of files that need to be downloaded.
-    is_top_level : bool
-        Flag to indicate whether the folder is at the top level.
-    """
-    item_name = item['name']
-    item_type = item['type']
-    item_url = item['url']
-
-    if item_type == 'dir':
-        sub_folder_local_path = os.path.join(local_path, item_name)
-        if not os.path.exists(sub_folder_local_path):
-            os.makedirs(sub_folder_local_path)
-        await fetch_folder_contents(session, item_url, sub_folder_local_path, files_to_download,
-                                    is_top_level=is_top_level)
-    elif item_type == 'file':
-        local_file_path = os.path.join(local_path, item_name)
-        if item['sha'] != calculate_sha1(local_file_path):
-            files_to_download.append({
-                'download_url': item['download_url'],
-                'local_path': local_file_path,
-                'size': item['size']
-            })
-
-
-async def download_files(session, files_to_download):
+async def download_files(session: aiohttp.ClientSession, files_to_download: list) -> None:
     """
     Download files concurrently and display a global progress bar.
 
@@ -235,30 +137,8 @@ async def download_files(session, files_to_download):
         await asyncio.gather(*download_tasks)
 
 
-async def get_tree_sha(session, folder):
-    """
-    Get the SHA of the tree for the specified folder.
-
-    Parameters
-    ----------
-    session : aiohttp.ClientSession
-        The active client session for making HTTP requests.
-    folder : str
-        The name of the folder to get the tree SHA.
-
-    Returns
-    -------
-    str
-        The SHA of the tree.
-    """
-    url = f'https://api.github.com/repos/ehylla93/had2-cmp/git/trees/main:{folder}'
-    tree_info = await fetch_with_retry(session, url)
-    if not tree_info:
-        return None
-    return tree_info['sha']
-
-
-async def fetch_tree_contents(session, tree_sha, local_path, files_to_download):
+async def fetch_tree_contents(session: aiohttp.ClientSession, folder: str, local_path: str,
+                              files_to_download: list) -> None:
     """
     Fetch contents of the specified tree SHA.
 
@@ -266,44 +146,34 @@ async def fetch_tree_contents(session, tree_sha, local_path, files_to_download):
     ----------
     session : aiohttp.ClientSession
         The active client session for making HTTP requests.
-    tree_sha : str
-        The SHA of the tree.
+    folder : str
+        folder name.
     local_path : str
         The local path where the folder contents should be saved.
     files_to_download : list
         The list to store the details of files that need to be downloaded.
     """
-    url = f'https://api.github.com/repos/ehylla93/had2-cmp/git/trees/{tree_sha}'
+    url = f'https://api.github.com/repos/ehylla93/had2-cmp/git/trees/main:{folder}?recursive=1'
     tree_contents = await fetch_with_retry(session, url)
 
     # Инициализация прогресс-бара
-    total_files = len(tree_contents['tree'])
-    with (tqdm(total=total_files, desc="Scanning Maps", unit=' file',
-               dynamic_ncols=True) as pbar):
-        for item in tree_contents['tree']:
-            item_name = item['path']
-            item_type = item['type']
-
-            if item_type == 'tree':
-                sub_folder_local_path = os.path.join(local_path, item_name)
-                if not os.path.exists(sub_folder_local_path):
-                    os.makedirs(sub_folder_local_path)
-                # Рекурсивный вызов для вложенных папок
-                await fetch_tree_contents(session, item['sha'], sub_folder_local_path,
-                                          files_to_download)
-            elif item_type == 'blob':
-                local_file_path = os.path.join(local_path, item_name)
-                if not Path(local_file_path).exists() \
-                        or item['sha'] != calculate_sha1(local_file_path):
-                    files_to_download.append({
-                        'download_url': f"{RAW_BASE_URL}/Maps/{item['path']}",
-                        'local_path': local_file_path,
-                        'size': item['size']
-                    })
-            pbar.update(1)  # Обновляем прогресс-бар
+    for item in tqdm(tree_contents['tree'], desc=f"Scanning {folder}", unit=' files',
+                     dynamic_ncols=True):
+        if item['type'] == 'tree':
+            sub_folder_local_path = os.path.join(local_path, item['path'])
+            if not os.path.exists(sub_folder_local_path):
+                os.makedirs(sub_folder_local_path)
+        elif item['type'] == 'blob':
+            local_file_path = os.path.join(local_path, item['path'])
+            if not Path(local_file_path).exists() or item['sha'] != calculate_sha1(local_file_path):
+                files_to_download.append({
+                    'download_url': f"{RAW_BASE_URL}/{folder}/{item['path']}",
+                    'local_path': local_file_path,
+                    'size': item['size']
+                })
 
 
-async def install_cmp(cmp_version):
+async def install_cmp(cmp_version: str) -> None:
     """
     Install CMP files from the repository.
 
@@ -312,42 +182,12 @@ async def install_cmp(cmp_version):
     print('Installing Coop Map Package (CMP)')
     async with aiohttp.ClientSession() as session:
         files_to_download = []
-
         for folder in FOLDERS_TO_CHECK:
-            if folder == 'Maps':
-                # Используем Git Trees API для папки Maps
-                tree_sha = await get_tree_sha(session, folder)
-                if tree_sha is None:
-                    continue
-                folder_local_path = os.path.join(os.getcwd(), folder)
-
-                if not os.path.exists(folder_local_path):
-                    print(folder_local_path)
-                    os.makedirs(folder_local_path)
-
-                await fetch_tree_contents(session, tree_sha, folder_local_path, files_to_download)
-            else:
-                # Обычная обработка других папок
-                folder_url = f"{GITHUB_REPO_URL}/{folder}"
-                folder_local_path = os.path.join(os.getcwd(), folder)
-
-                if not os.path.exists(folder_local_path):
-                    print(folder_local_path)
-                    os.makedirs(folder_local_path)
-
-                await fetch_folder_contents(session, folder_url, folder_local_path,
-                                            files_to_download)
-
-        for optional_path in CMP_OPTIONAL_PATHS:
-            optional_url = f"{GITHUB_REPO_URL}/{optional_path}"
-            optional_local_path = os.path.join(os.getcwd(), optional_path)
-
-            if not os.path.exists(optional_local_path):
-                print(optional_local_path)
-                os.makedirs(optional_local_path)
-
-            await fetch_folder_contents(session, optional_url, optional_local_path,
-                                        files_to_download)
+            folder_local_path = os.path.join(os.getcwd(), folder)
+            if not os.path.exists(folder_local_path):
+                print(folder_local_path)
+                os.makedirs(folder_local_path)
+            await fetch_tree_contents(session, folder, folder_local_path, files_to_download)
 
         if files_to_download:
             logging.info(f"Downloading {len(files_to_download)} files...")
@@ -374,6 +214,7 @@ async def main():
     logging.basicConfig(filename='hd2_sync.log', level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("Starting HD2 CMP Sync Tool.")
+    await check_latest_version()
     check_internet_connection()
     check_game_executable()
 
@@ -402,6 +243,7 @@ async def main():
         print("Program has ended.")
         logging.info("Program has ended.")
 
+
 async def menu():
     """
     Console application menu
@@ -409,18 +251,46 @@ async def menu():
     repo_version = await fetch_cmp_version()
     while True:
         print("1. Install CMP")
-        print("2. Exit")
+        print("2. Go to GitHub page")
+        print("3. Exit")
         choice = input("Choose an option: ")
 
         if choice == '1':
             await install_cmp(repo_version)
             break
         if choice == '2':
+            print("Opening GitHub page...")
+            webbrowser.open("https://github.com/DarkMatro/HD2_mod_installer")
+        if choice == '3':
             print("Exiting the program.")
             logging.info("User chose to exit the program.")
             break
         print("Invalid choice. Please try again.")
 
+def is_admin():
+    """
+    Checks if the script is running as administrator.
+    """
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    """
+    Restarts the script with administrator rights.
+    """
+    if is_admin():
+        return
+    try:
+        # Запускает этот скрипт с правами администратора
+        ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, ' '.join(sys.argv), None, 1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
+    run_as_admin()
     asyncio.run(main())
