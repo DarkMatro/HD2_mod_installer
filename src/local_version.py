@@ -151,6 +151,8 @@ async def self_update(latest_version: str, download_url: str) -> None:
         move /y "{temp_exe_path}" "{sys.argv[0]}"
         timeout /t 2 /nobreak > nul
         start "" "{sys.argv[0]}"
+        timeout /t 2 /nobreak > nul
+        del "%~f0" & exit
         """
         bat_path = os.path.join(os.getcwd(), "update.bat")
         with open(bat_path, "w", encoding='utf-8') as bat_file:
