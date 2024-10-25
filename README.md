@@ -13,7 +13,7 @@ This repository contains the **HD2 Mod Installer**, a Python script designed to 
 ## Features
 
 - **Manual Update**: Provides a console menu for manually checking and updating files.
-- **Efficient File Management**: Downloads only the files that have changed based on their SHA-1 hashes.
+- **Efficient File Management**: Downloads or deletes only the files that have changed based on their SHA-1 hashes.
   
 ## Installation
 
@@ -22,7 +22,8 @@ This repository contains the **HD2 Mod Installer**, a Python script designed to 
   
 ## Usage
 - Open mod_installer.exe.
-- Choose Install CMP to check files and download from actual repository.
+- Choose mod to install/uninstall.
 
 ## Mods
 - [Coop Map Package (CMP)](https://github.com/ehylla93/had2-cmp)
+- [Texture and Sounds mods by Max](https://github.com/DarkMatro/Texture-and-Sounds-mods-by-Max)
