@@ -87,8 +87,6 @@ async def uninstall_max_mod() -> None:
                 continue
             await fetch_tree_contents(URL_RU, session, folder, folder_local_path, files_to_delete,
                                       is_delete=True)
-        print(len(files_to_delete))
-        print(files_to_delete)
         if files_to_delete:
             logging.info(f"Deleting {len(files_to_delete)} files...")
             await delete_files(files_to_delete)
