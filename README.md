@@ -18,7 +18,7 @@ This repository contains the **HD2 Mod Installer**, a Python script designed to 
   
 ## Installation
 
-- Download latest release.
+- Download [latest release](https://github.com/DarkMatro/HD2_mod_installer/releases/download/v0.0.3/mod_installer.exe). 
 - Copy file mod_installer.exe to game folder.
   
 ## Usage
