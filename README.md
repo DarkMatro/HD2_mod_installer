@@ -28,3 +28,8 @@ This repository contains the **HD2 Mod Installer**, a Python script designed to 
 ## Mods
 - [Coop Map Package (CMP)](https://github.com/ehylla93/had2-cmp)
 - [Texture and Sounds mods by Max](https://github.com/DarkMatro/Texture-and-Sounds-mods-by-Max)
+
+## Code compilation to .exe (for developers only)
+```bash
+pyinstaller  --name="mod_installer"  main.py --onefile --hiddenimport pygit2 --hiddenimport _cffi_backend --icon 'icons/icon.ico'
+```

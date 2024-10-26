@@ -1,3 +1,5 @@
+# pylint: disable=logging-fstring-interpolation
+
 import logging
 import os
 import time
@@ -8,7 +10,6 @@ import aiohttp
 import psutil
 import pygit2
 from tqdm import tqdm
-
 
 
 def calculate_sha1(file_path):
@@ -142,7 +143,7 @@ async def fetch_with_retry(session, url, retries=3, backoff_factor=2) -> dict | 
     msg = f"Failed to fetch data after {retries} attempts. Try again later."
     logging.error(msg)
     print(msg)
-    return []
+    raise ConnectionError(msg)
 
 
 def check_and_prepare_file(item, folder, local_path, files_to_download, raw_base_url):

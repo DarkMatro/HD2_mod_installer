@@ -117,6 +117,7 @@ async def fetch_self_actual_version() -> tuple:
                     return None, None
                 return latest_version, download_url
             logging.error(f"Failed to fetch the latest version. Status code: {response.status}")
+            return None, None
 
 
 async def self_update(latest_version: str, download_url: str) -> None:
@@ -220,20 +221,26 @@ async def fetch_max_version() -> str | None:
                 release_data = await response.json()
                 latest_version = release_data['tag_name']
                 return latest_version
+            if response.status == 403:
+                logging.error(f"Failed to fetch the latest max mod version. "
+                              f"Status code: {response.status}")
+                return 'unknown due to connection error: 403'
             logging.error(f"Failed to fetch the latest version. Status code: {response.status}")
 
 
-async def print_versions(package_name: str) -> None:
+async def print_versions(package_key: str, package_name) -> None:
     """
     Get online version and compare with local.
 
     Parameters
     -------
-    package_name : str
+    package_key : str
         Type of mod ('CMP' or 'Mods by Max')
+    package_name : str
+        full name of mod
     """
-    local_version = get_local_version(package_name)
-    repo_version = await fetch_cmp_version() if package_name == 'CMP' \
+    local_version = get_local_version(package_key)
+    repo_version = await fetch_cmp_version() if package_key == 'CMP' \
         else await fetch_max_version()
     msg = (f"Actual version for {package_name} is {repo_version}, local version is"
            f" {'None' if local_version is None else local_version}") + '. '
