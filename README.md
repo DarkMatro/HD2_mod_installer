@@ -1,5 +1,5 @@
 # HD2 Mod Installer
-![image](https://github.com/user-attachments/assets/77d12014-649b-40bd-afe0-e5839eca21fa)
+![image](https://github.com/user-attachments/assets/5bf12936-2dc3-4d18-b868-b44ec841141c)
 
 This repository contains the **HD2 Mod Installer**, a Python script designed to synchronize the files of the Hidden & Dangerous 2 (HD2) game with a specific GitHub repository. The tool is particularly useful for ensuring that the game files are up to date with the latest versions available in the repository.
 
